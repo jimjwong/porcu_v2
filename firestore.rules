@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: links
+    // Document ID: shortId
+    // Fields:
+    //   - id: string (required) - The short ID
+    //   - originalUrl: string (required) - Target URL
+    //   - shortUrl: string (required) - Full short URL
+    //   - userId: string (required) - Owner UID
+    //   - createdAt: number (required) - Timestamp
+    //   - clicks: number (required) - Total clicks
+    //   - title: string (optional) - Link title
+    //
+    // Collection: links/{linkId}/clicks
+    // Document ID: auto-generated
+    // Fields:
+    //   - id: string (required)
+    //   - linkId: string (required)
+    //   - timestamp: number (required)
+    //   - userAgent: string (required)
+    //   - referrer: string (required)
+    //   - country: string (optional)
+    //   - city: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isLinkOwner(linkId) {
+      return isAuthenticated() && request.auth.uid == get(/databases/$(database)/documents/links/$(linkId)).data.userId;
+    }
+
+    function isValidLink(data) {
+      return data.keys().hasAll(['id', 'originalUrl', 'shortUrl', 'userId', 'createdAt', 'clicks']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 50 &&
+             data.originalUrl is string && data.originalUrl.size() < 2048 &&
+             data.shortUrl is string && data.shortUrl.size() < 100 &&
+             data.userId is string &&
+             data.createdAt is number &&
+             data.clicks is number;
+    }
+
+    function isValidClick(data) {
+      return data.keys().hasAll(['id', 'linkId', 'timestamp', 'userAgent', 'referrer']) &&
+             data.id is string &&
+             data.linkId is string &&
+             data.timestamp is number &&
+             data.userAgent is string && data.userAgent.size() < 1000 &&
+             data.referrer is string && data.referrer.size() < 2048;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /links/{linkId} {
+      // Anyone can read a single link to perform a redirect
+      allow get: if true;
+      
+      // Only the owner can list their links
+      allow list: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      
+      allow create: if isAuthenticated() && 
+                      isValidLink(request.resource.data) && 
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.clicks == 0;
+                      
+      allow update: if isAuthenticated() && 
+                      request.auth.uid == resource.data.userId &&
+                      isValidLink(request.resource.data) &&
+                      request.resource.data.userId == resource.data.userId &&
+                      request.resource.data.id == resource.data.id;
+
+      // Allow anyone to increment the click counter
+      // But we must ensure ONLY the clicks field is updated and it's an increment
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks']) &&
+                      request.resource.data.clicks == resource.data.clicks + 1;
+
+      match /clicks/{clickId} {
+        // Anyone can record a click
+        allow create: if isValidClick(request.resource.data);
+        
+        // Only the link owner can see the analytics
+        allow read: if isLinkOwner(linkId);
+      }
+    }
+
+    match /_connection_test_/{docId} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "ShortLink": {
+      "title": "ShortLink",
+      "description": "A shortened URL and its metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique short ID" },
+        "originalUrl": { "type": "string", "format": "uri", "description": "The target URL" },
+        "shortUrl": { "type": "string", "description": "The generated short URL" },
+        "userId": { "type": "string", "description": "The owner's UID" },
+        "createdAt": { "type": "number", "description": "Creation timestamp" },
+        "clicks": { "type": "number", "description": "Total click count" },
+        "title": { "type": "string", "description": "Optional title for the link" }
+      },
+      "required": ["id", "originalUrl", "shortUrl", "userId", "createdAt", "clicks"]
+    },
+    "ClickEvent": {
+      "title": "ClickEvent",
+      "description": "An individual click event on a short link",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique event ID" },
+        "linkId": { "type": "string", "description": "The ID of the short link" },
+        "timestamp": { "type": "number", "description": "Click timestamp" },
+        "userAgent": { "type": "string", "description": "Browser user agent" },
+        "referrer": { "type": "string", "description": "Referrer URL" },
+        "country": { "type": "string", "description": "Country code" },
+        "city": { "type": "string", "description": "City name" }
+      },
+      "required": ["id", "linkId", "timestamp", "userAgent", "referrer"]
+    }
+  },
+  "firestore": {
+    "/links/{linkId}": {
+      "schema": "ShortLink",
+      "description": "Collection of shortened links"
+    },
+    "/links/{linkId}/clicks/{clickId}": {
+      "schema": "ClickEvent",
+      "description": "Subcollection of clicks for a specific link"
+    }
+  }
+}
